@@ -200,6 +200,12 @@ def _make_tool(
             f"{name} returned in {step.latency_ms} ms",
             json.dumps(step.result, indent=2),
         )
+        _emit(
+            trace_callback,
+            "THINKING",
+            "Reviewing the tool result and deciding the next step",
+            None,
+        )
         return json.dumps(step.result)
 
     return StructuredTool.from_function(

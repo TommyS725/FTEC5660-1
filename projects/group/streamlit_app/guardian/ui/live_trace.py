@@ -46,14 +46,11 @@ class LiveTraceStore:
                     },
                 )
             )
-            rows = list(trace.get("rows", []))
-            rows.append(
-                {
-                    "tag": tag.upper(),
-                    "message": _trim(message, _MAX_MESSAGE),
-                    "detail": _trim(detail, _MAX_DETAIL) if detail else None,
-                    "time": datetime.now().strftime("%H:%M:%S"),
-                }
+            rows = _append_row(
+                list(trace.get("rows", [])),
+                tag=tag,
+                message=message,
+                detail=detail,
             )
             trace["rows"] = rows[-_MAX_ROWS:]
             if tag.upper() == "FINAL":
@@ -107,6 +104,33 @@ def _render_row(row: dict[str, Any]) -> None:
     detail = row.get("detail")
     if detail:
         st.code(str(detail), language="text")
+
+
+def _append_row(
+    rows: list[dict[str, Any]],
+    *,
+    tag: str,
+    message: str,
+    detail: str | None,
+) -> list[dict[str, Any]]:
+    normalized_tag = tag.upper()
+    next_rows = list(rows)
+
+    # Keep THINKING as a transient placeholder so it disappears when the
+    # next concrete step (ACTION / OBSERVATION / FINAL / ERROR) arrives.
+    if next_rows and next_rows[-1].get("transient"):
+        next_rows.pop()
+
+    next_rows.append(
+        {
+            "tag": normalized_tag,
+            "message": _trim(message, _MAX_MESSAGE),
+            "detail": _trim(detail, _MAX_DETAIL) if detail else None,
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "transient": normalized_tag == "THINKING",
+        }
+    )
+    return next_rows
 
 
 def _trim(value: str | None, limit: int) -> str:

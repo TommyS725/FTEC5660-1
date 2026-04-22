@@ -73,7 +73,12 @@ def score_risk_with_langchain_agent(
             tool_message_content="Risk assessment captured.",
         ),
     )
-    _emit(trace_callback, "THINKING", "LangChain agent loop started", None)
+    _emit(
+        trace_callback,
+        "THINKING",
+        "Reviewing the prompt and deciding whether a tool call is needed",
+        None,
+    )
     result = agent.invoke(
         {
             "messages": [
