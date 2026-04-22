@@ -8,11 +8,10 @@ route was active).
 from __future__ import annotations
 
 import time
-from datetime import datetime
-
 import streamlit as st
 
 from guardian.agents.intervention_agent import InterventionAction, InterventionLevel
+from guardian.agents.risk_agent import RiskAgent, RuleScoreContribution
 from guardian.agents.user_settings import UserSettingsStore
 from guardian.ui.widgets import risk_chip
 
@@ -72,11 +71,14 @@ def _intervention_dialog(*, pending_id: str, started_key: str) -> None:
         return
 
     is_delay = action.level == InterventionLevel.DELAY
+    is_manual_review = action.level == InterventionLevel.MANUAL_REVIEW
 
     # Headline + risk chip.
     st.subheader(action.headline)
     st.markdown(risk_chip(action.risk))
     st.markdown(action.body)
+    if is_manual_review:
+        _render_manual_review_details(action.event_id)
 
     # Cool-off countdown.
     started_at = st.session_state.get(started_key, time.monotonic())
@@ -112,6 +114,27 @@ def _intervention_dialog(*, pending_id: str, started_key: str) -> None:
     st.divider()
 
     cols = st.columns([1, 1])
+    if is_manual_review:
+        if cols[0].button(
+            "Cancel transfer",
+            key=f"intv_cancel_{action.id}",
+            use_container_width=True,
+        ):
+            st.session_state["bank_transfer_cancelled_event_id"] = action.event_id
+            intervention.resolve_pending()
+            st.rerun()
+
+        if cols[1].button(
+            "Proceed after review",
+            key=f"intv_proceed_{action.id}",
+            type="primary",
+            disabled=remaining > 0,
+            use_container_width=True,
+        ):
+            intervention.override_pending()
+            st.rerun()
+        return
+
     if cols[0].button(
         "📞 Call my son",
         key=f"intv_call_{action.id}",
@@ -131,3 +154,48 @@ def _intervention_dialog(*, pending_id: str, started_key: str) -> None:
     ):
         intervention.override_pending()
         st.rerun()
+
+
+def _render_manual_review_details(event_id: str) -> None:
+    risk_agent: RiskAgent = st.session_state["risk"]
+    assessment = next(
+        (assessment for assessment in reversed(risk_agent.assessments) if assessment.event_id == event_id),
+        None,
+    )
+    if assessment is None:
+        return
+
+    st.caption("Review the current transfer risk before proceeding.")
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("Fast rule", f"{assessment.fast_risk:.2f}")
+    metric_cols[1].metric(
+        "LLM",
+        f"{assessment.llm_risk:.2f}" if assessment.llm_risk is not None else "—",
+    )
+    metric_cols[2].metric(
+        "Reviewer",
+        f"{assessment.reviewer_risk:.2f}" if assessment.reviewer_risk is not None else "—",
+    )
+    metric_cols[3].metric("Final", f"{assessment.final_risk:.2f}")
+
+    info_cols = st.columns(2)
+    info_cols[0].markdown(f"**Consensus:** `{assessment.consensus}`")
+    info_cols[1].markdown(f"**Source:** `{assessment.source}`")
+
+    if assessment.reasons:
+        with st.expander("Analysis", expanded=True):
+            for reason in assessment.reasons:
+                st.markdown(f"- {reason}")
+
+    if assessment.contributions:
+        with st.expander("Rule contributions", expanded=False):
+            _render_contributions(assessment.contributions)
+
+
+def _render_contributions(contribs: list[RuleScoreContribution]) -> None:
+    for contribution in contribs:
+        cols = st.columns([2, 5, 1])
+        cols[0].markdown(f"`{contribution.feature}`")
+        cols[1].progress(min(1.0, max(0.0, contribution.value)))
+        cols[2].markdown(f"**+{contribution.value:.2f}**")
+        st.caption(contribution.detail)

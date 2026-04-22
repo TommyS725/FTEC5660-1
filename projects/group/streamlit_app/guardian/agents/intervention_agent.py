@@ -29,6 +29,7 @@ if TYPE_CHECKING:  # pragma: no cover
 class InterventionLevel(str, Enum):
     NONE = "none"
     BANNER = "banner"
+    MANUAL_REVIEW = "manualReview"
     FULL_SCREEN = "fullScreen"
     DELAY = "delay"
 
@@ -78,6 +79,7 @@ class InterventionAgent:
             event_id=event.id,
             created_at=datetime.now(),
             cooldown_seconds={
+                InterventionLevel.MANUAL_REVIEW: 5,
                 InterventionLevel.FULL_SCREEN: 60,
                 InterventionLevel.DELAY: 60 * 60 * 24,
             }.get(level, 0),
@@ -144,6 +146,8 @@ class InterventionAgent:
             return InterventionLevel.DELAY
         if is_txn and risk >= 0.6:
             return InterventionLevel.FULL_SCREEN
+        if is_txn and risk >= 0.3:
+            return InterventionLevel.MANUAL_REVIEW
         if risk >= 0.75:
             return InterventionLevel.FULL_SCREEN
         if risk >= 0.3:
@@ -164,6 +168,8 @@ class InterventionAgent:
             subject = "this event"
         if level is InterventionLevel.BANNER:
             return f"Something looks off about {subject}"
+        if level is InterventionLevel.MANUAL_REVIEW:
+            return f"Manual review recommended for {subject}"
         if level is InterventionLevel.FULL_SCREEN:
             return f"Pause — {subject} looks like a scam"
         if level is InterventionLevel.DELAY:

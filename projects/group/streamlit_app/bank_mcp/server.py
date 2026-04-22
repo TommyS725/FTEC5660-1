@@ -44,7 +44,7 @@ def check_beneficiary_for_bank_transfer(
     recipient_name: str,
     account_number: str,
 ) -> dict[str, str]:
-    """Check beneficiary name match and prior risk reports for a bank transfer review."""
+    """Check a bank transfer beneficiary using recipient name and account number for bank transfer review."""
     result = repository().check_beneficiary(
         recipient_name=recipient_name,
         account_number=account_number,
@@ -59,7 +59,7 @@ def report_beneficiary_risk_for_bank_transfer(
     recipient_name: str | None = None,
     case_id: str | None = None,
 ) -> dict[str, str]:
-    """Report a beneficiary account as suspicious for bank transfer scam/risk review."""
+    """Report a bank transfer beneficiary as suspicious using beneficiary account number and optional recipient name."""
     result = repository().report_beneficiary_risk(
         account_number=account_number,
         recipient_name=recipient_name,

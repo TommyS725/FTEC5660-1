@@ -95,9 +95,11 @@ def build_default_tool_registry(
             _make_tool(
                 name="lookup_number",
                 description=(
-                    "Check whether a phone number (or a substring of one) is on a "
-                    "known scam blocklist. Returns {hit, tag, weight, note} if a "
-                    "match is found, else {hit: false}."
+                    "Check a phone number, caller ID, or number substring against "
+                    "a known scam-number blocklist. Use this only for phone-number "
+                    "checking, not for website domains, beneficiary account numbers, "
+                    "or recipient-name review. Returns {hit, tag, weight, note} if "
+                    "a match is found, else {hit: false}."
                 ),
                 parameters={
                     "type": "object",
@@ -119,9 +121,11 @@ def build_default_tool_registry(
             _make_tool(
                 name="check_domain",
                 description=(
-                    "Scan text for URLs or domains that are known phishing / scam "
-                    "hosts. Returns {hit, matches: [{domain, tag, weight, note}]} "
-                    "or {hit: false}."
+                    "Check website domains or URLs mentioned in message / SMS / chat "
+                    "text against known phishing or scam hosts. Use this only for "
+                    "website-domain checking, not for phone numbers, beneficiary "
+                    "names, account numbers, or general web reputation. Returns "
+                    "{hit, matches: [{domain, tag, weight, note}]} or {hit: false}."
                 ),
                 parameters={
                     "type": "object",
@@ -140,8 +144,11 @@ def build_default_tool_registry(
             _make_tool(
                 name="search_keywords",
                 description=(
-                    "Search text for phrases commonly used in scam scripts. Returns "
-                    "{count, total_weight, hits: [{keyword, tag, weight}]}."
+                    "Search message, SMS, chat, or call-transcript text for scam "
+                    "script phrases. Use this only for free-form text analysis, not "
+                    "for website-domain checks, phone-number checks, or bank "
+                    "beneficiary validation. Returns {count, total_weight, hits: "
+                    "[{keyword, tag, weight}]}."
                 ),
                 parameters={
                     "type": "object",
@@ -172,10 +179,13 @@ def build_default_tool_registry(
             _make_tool(
                 name="check_beneficiary_for_bank_transfer",
                 description=(
-                    "Check beneficiary name match and prior risk reports for a "
-                    "bank transfer review. Returns {name_account_check, "
-                    "reported_risk_status} for the entered recipient name and "
-                    "account number."
+                    "Check a bank transfer beneficiary using the entered recipient "
+                    "name and beneficiary account number. Use this only for bank "
+                    "transfer review when you need to compare recipient name versus "
+                    "account-number registry data and check prior beneficiary risk "
+                    "reports. Do not use it for website domains, phone numbers, or "
+                    "general identity checks. Returns {name_account_check, "
+                    "reported_risk_status}."
                 ),
                 parameters={
                     "type": "object",

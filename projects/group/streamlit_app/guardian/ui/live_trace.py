@@ -53,6 +53,7 @@ class LiveTraceStore:
                 detail=detail,
             )
             trace["rows"] = rows[-_MAX_ROWS:]
+            trace["updated_at_ts"] = datetime.now().timestamp()
             if tag.upper() == "FINAL":
                 trace["status"] = "complete"
             self._traces[event_id] = trace
@@ -69,29 +70,63 @@ class LiveTraceStore:
         with self._lock:
             return any(trace.get("status") == "running" for trace in self._traces.values())
 
-    def prune_completed(self) -> None:
+    def get(self, event_id: str) -> dict[str, Any] | None:
         with self._lock:
-            self._traces = {
-                event_id: trace
-                for event_id, trace in self._traces.items()
-                if trace.get("status") == "running"
-            }
+            trace = self._traces.get(event_id)
+            return dict(trace) if trace is not None else None
+
+    def recent_completed(self, *, limit: int = 3) -> list[dict[str, Any]]:
+        with self._lock:
+            completed = [
+                dict(trace)
+                for trace in self._traces.values()
+                if trace.get("status") == "complete"
+            ]
+        completed.sort(key=lambda trace: float(trace.get("updated_at_ts", 0.0)), reverse=True)
+        return completed[:limit]
 
 
 def render(store: LiveTraceStore) -> None:
     running = store.running()
-    if not running:
-        store.prune_completed()
+    completed = store.recent_completed()
+    if not running and not completed:
         return
 
-    st.subheader("Running agent traces")
-    for event_id, trace in running.items():
-        rows = list(trace.get("rows", []))
-        label = f"{event_id} · {len(rows)} step(s)"
-        with st.expander(label, expanded=True):
-            for row in rows:
-                _render_row(row)
-    store.prune_completed()
+    if running:
+        st.subheader("Running agent traces")
+        for event_id, trace in running.items():
+            rows = list(trace.get("rows", []))
+            label = f"{event_id} · {len(rows)} step(s)"
+            with st.expander(label, expanded=True):
+                for row in rows:
+                    _render_row(row)
+
+    if completed:
+        st.subheader("Recent assessment traces")
+        for trace in completed:
+            event_id = str(trace.get("event_id", "unknown"))
+            rows = list(trace.get("rows", []))
+            label = f"{event_id} · {len(rows)} step(s) · complete"
+            with st.expander(label, expanded=False):
+                for row in rows:
+                    _render_row(row)
+
+
+def render_event(store: LiveTraceStore, event_id: str) -> None:
+    trace = store.get(event_id)
+    if trace is None:
+        return
+
+    rows = list(trace.get("rows", []))
+    if not rows:
+        return
+
+    status = str(trace.get("status", "running"))
+    label = f"{event_id} · {len(rows)} step(s) · {status}"
+    st.subheader("Transfer review trace")
+    with st.expander(label, expanded=True):
+        for row in rows:
+            _render_row(row)
 
 
 def _render_row(row: dict[str, Any]) -> None:

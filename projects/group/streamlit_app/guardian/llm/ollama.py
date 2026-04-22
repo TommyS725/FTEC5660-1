@@ -85,7 +85,7 @@ class OllamaLlmRuntime(LlmRuntime):
 
     @property
     def name(self) -> str:
-        return f"ollama/{self.model}" if "/" in self.model else self.model
+        return f"ollama/{self.model}" if "/" not in self.model else self.model
 
     def is_reachable(self, timeout: float = 2.0) -> bool:
         try:
