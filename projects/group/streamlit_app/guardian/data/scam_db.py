@@ -6,6 +6,8 @@ iterators for blocklisted numbers, phishing domains, and scam keywords.
 
 from __future__ import annotations
 
+import csv
+from io import StringIO
 from dataclasses import dataclass
 from enum import Enum
 from typing import Iterable
@@ -62,14 +64,15 @@ class ScamDatabase:
 
 
 def _parse_csv_entries(raw: str) -> list[ScamEntry]:
-    lines = [line for line in raw.splitlines() if line.strip()]
-    if not lines:
+    if not raw.strip():
         return []
 
     out: list[ScamEntry] = []
-    # Skip header.
-    for line in lines[1:]:
-        parts = line.split(",")
+    reader = csv.reader(StringIO(raw))
+    next(reader, None)  # skip header
+    for parts in reader:
+        if not parts or not any(part.strip() for part in parts):
+            continue
         if len(parts) < 4:
             continue
         raw_type = parts[0].strip()

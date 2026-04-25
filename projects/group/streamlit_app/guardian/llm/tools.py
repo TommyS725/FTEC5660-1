@@ -185,7 +185,10 @@ def build_default_tool_registry(
                     "transfer review when you need to compare recipient name versus "
                     "account-number registry data and check prior beneficiary risk "
                     "reports. Do not use it for website domains, phone numbers, or "
-                    "general identity checks. Returns {name_account_check, "
+                    "general identity checks. Call this only when both recipient_name "
+                    "and account_number are real values from the transfer event or form. "
+                    "Do not call it with placeholders such as N/A, unknown, none, null, "
+                    "or empty strings. Returns {name_account_check, "
                     "reported_risk_status}."
                 ),
                 parameters={
@@ -194,13 +197,15 @@ def build_default_tool_registry(
                         "recipient_name": {
                             "type": "string",
                             "description": (
-                                "Recipient name entered on the bank transfer form."
+                                "Recipient name entered on the bank transfer form. "
+                                "Must be a real value, not N/A or unknown."
                             ),
                         },
                         "account_number": {
                             "type": "string",
                             "description": (
-                                "Beneficiary account number entered for the bank transfer."
+                                "Beneficiary account number entered for the bank transfer. "
+                                "Must be a real value, not N/A or unknown."
                             ),
                         },
                     },
@@ -468,11 +473,28 @@ def _check_beneficiary_for_bank_transfer(
     provider: ScamSignalProvider,
     args: dict[str, Any],
 ) -> dict[str, Any]:
-    recipient_name = str(args.get("recipient_name", ""))
-    account_number = str(args.get("account_number", ""))
+    recipient_name = str(args.get("recipient_name", "")).strip()
+    account_number = str(args.get("account_number", "")).strip()
+    if not _has_meaningful_transfer_party_info(recipient_name, account_number):
+        return {
+            "status": "rejected",
+            "reason": "missing_transfer_party_info",
+            "source": "tool_guard",
+        }
     return provider.check_beneficiary_for_bank_transfer(
         recipient_name,
         account_number,
+    )
+
+
+def _has_meaningful_transfer_party_info(
+    recipient_name: str,
+    account_number: str,
+) -> bool:
+    invalid = {"", "n/a", "na", "none", "null", "unknown", "not available"}
+    return (
+        recipient_name.strip().lower() not in invalid
+        and account_number.strip().lower() not in invalid
     )
 
 

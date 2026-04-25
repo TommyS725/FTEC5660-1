@@ -86,9 +86,7 @@ Rules:
 - Emit exactly ONE tag per reply. No prose outside the tag.
 - After each <tool> call, the next user message will contain an <observation>
   tag with JSON results. Use it to decide your next action.
-- Prefer to run 1–3 tools when the trigger is ambiguous; skip tools when the
-  signal is already obvious.
-- For bank transfers, you should  ALWAYS check the beneficiary's name and account number against the user's transaction history.
+- For transfer, you should  ALWAYS call check_beneficiary_for_bank_transfer FIRST.
 - Maximum 5 tool calls per decision — after that you MUST emit <final>.
 - The "tactics" field in <final> must come from this set:
   authority_impersonation, urgency, isolation, payment_redirect,
@@ -97,6 +95,10 @@ Rules:
 - "reasons" are short plain-language sentences (≤ 12 words, elderly-friendly).
 - Never invent facts not present in input or tool observations.
 """
+
+
+# - Prefer to run 1–3 tools when the trigger is ambiguous; skip tools when the
+#   signal is already obvious.
 
 
 def _describe_event(e: ScamEvent) -> str:

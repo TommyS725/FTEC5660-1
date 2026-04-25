@@ -11,10 +11,18 @@ as ``pages/1_🏠_Home.py`` so both entry paths show the same content.
 
 from __future__ import annotations
 
+import logging
+
 import streamlit as st
 
 from guardian.state import bootstrap
 from guardian.ui import home
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    force=True,
+)
 
 st.set_page_config(
     page_title="Guardian — Anti-Scam Decision Security",

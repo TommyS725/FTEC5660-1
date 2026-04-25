@@ -130,6 +130,15 @@ You may call tools to gather evidence before producing the final risk JSON.
 Use at most {max_steps} tool calls. When you have enough evidence, produce
 exactly one structured risk response.
 Never invent facts not present in the input or tool results.
+If the trigger is a bank transfer, call check_beneficiary_for_bank_transfer
+before your final answer unless the transfer is missing recipient name or
+account number.
+Never call check_beneficiary_for_bank_transfer with placeholder values such
+as N/A, unknown, none, null, or empty strings.
+For transfer events, prefer this order:
+1. check_beneficiary_for_bank_transfer
+2. get_history and/or retrieve_transfer_guidance if more context is needed
+Do not skip the beneficiary check when recipient name and account number are present.
 """
 
 

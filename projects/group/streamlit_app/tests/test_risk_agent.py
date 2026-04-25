@@ -6,6 +6,7 @@ tests are out of scope — the eval harness + manual demo cover those.
 
 from __future__ import annotations
 
+import csv
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from guardian.data.event_log import EventLog
 from guardian.data.scam_db import ScamDatabase
 from guardian.data.scam_signals import ScamDbProvider
 from guardian.llm.heuristic import HeuristicLlmRuntime
+from guardian.llm.tools import _check_beneficiary_for_bank_transfer
 from guardian.paths import SCAM_DB_CSV
 from guardian.scenarios.events import (
     CallEvent,
@@ -224,6 +226,16 @@ def test_auto_update_scamdatabase_for_unknown_high_risk_sms(db: ScamDatabase, tm
     assert len(lines) == 2
     assert sender.lower() in lines[1].lower()
 
+    parsed = ScamDatabase.from_csv(runtime_csv.read_text(encoding="utf-8"))
+    assert any(entry.value == sender.lower() for entry in parsed.bad_numbers())
+
+    with runtime_csv.open("r", encoding="utf-8", newline="") as f:
+        rows = list(csv.reader(f))
+    assert rows[0] == ["type", "value", "weight", "tag", "note"]
+    assert rows[1][0] == "number"
+    assert rows[1][1] == sender.lower()
+    assert "reason=" in rows[1][4]
+
 
 def test_auto_update_scamdatabase_skips_duplicate_number(db: ScamDatabase, tmp_path: Path):
     runtime_csv = tmp_path / "scam_db_runtime.csv"
@@ -266,3 +278,18 @@ def test_auto_update_scamdatabase_skips_duplicate_number(db: ScamDatabase, tmp_p
 
     lines = [line for line in runtime_csv.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert len(lines) == 2
+
+
+def test_bank_tool_rejects_placeholder_transfer_info(db: ScamDatabase, tmp_path: Path):
+    provider = ScamDbProvider(db, runtime_csv=tmp_path / "scam_db_runtime.csv")
+
+    out = _check_beneficiary_for_bank_transfer(
+        provider,
+        {"recipient_name": "N/A", "account_number": "N/A"},
+    )
+
+    assert out == {
+        "status": "rejected",
+        "reason": "missing_transfer_party_info",
+        "source": "tool_guard",
+    }

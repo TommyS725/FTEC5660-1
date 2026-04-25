@@ -13,6 +13,7 @@ import asyncio
 import csv
 import json
 import logging
+from csv import QUOTE_ALL
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from pathlib import Path
@@ -187,14 +188,25 @@ class ScamDbProvider(ScamSignalProvider):
 
         self._runtime_csv.parent.mkdir(parents=True, exist_ok=True)
         if not self._runtime_csv.exists():
-            self._runtime_csv.write_text("type,value,weight,tag,note\n", encoding="utf-8")
+            with self._runtime_csv.open("w", encoding="utf-8", newline="") as f:
+                writer = csv.writer(
+                    f,
+                    quoting=QUOTE_ALL,
+                    lineterminator="\n",
+                )
+                writer.writerow(["type", "value", "weight", "tag", "note"])
 
+        clean_reason = " ".join((reason or "").split())
         note = (
             f"auto-added {datetime.now(UTC).isoformat()} "
-            f"event={event_id} model={source_model} risk={risk:.3f} reason={reason}"
+            f"event={event_id} model={source_model} risk={risk:.3f} reason={clean_reason}"
         )
         with self._runtime_csv.open("a", encoding="utf-8", newline="") as f:
-            writer = csv.writer(f)
+            writer = csv.writer(
+                f,
+                quoting=QUOTE_ALL,
+                lineterminator="\n",
+            )
             writer.writerow(
                 [
                     "number",
@@ -446,6 +458,10 @@ class FallbackProvider(ScamSignalProvider):
         account_number: str,
     ) -> dict[str, Any]:
         if self._bank_review_mcp is None:
+            log.info(
+                "bank review MCP not configured; using local bank review for %s",
+                account_number,
+            )
             return self._local.check_beneficiary_for_bank_transfer(
                 recipient_name,
                 account_number,
@@ -455,7 +471,12 @@ class FallbackProvider(ScamSignalProvider):
                 recipient_name,
                 account_number,
             )
-        except Exception:
+        except Exception as exc:
+            log.warning(
+                "bank review MCP check failed for %s: %s; falling back to local bank review",
+                account_number,
+                exc,
+            )
             if self._strict:
                 raise
             out = self._local.check_beneficiary_for_bank_transfer(
@@ -475,6 +496,10 @@ class FallbackProvider(ScamSignalProvider):
         case_id: str | None = None,
     ) -> dict[str, Any]:
         if self._bank_review_mcp is None:
+            log.info(
+                "bank review MCP not configured; using local bank review report path for %s",
+                account_number,
+            )
             return self._local.report_beneficiary_risk_for_bank_transfer(
                 account_number=account_number,
                 reason_code=reason_code,
@@ -488,7 +513,12 @@ class FallbackProvider(ScamSignalProvider):
                 recipient_name=recipient_name,
                 case_id=case_id,
             )
-        except Exception:
+        except Exception as exc:
+            log.warning(
+                "bank review MCP report failed for %s: %s; falling back to local bank review",
+                account_number,
+                exc,
+            )
             if self._strict:
                 raise
             out = self._local.report_beneficiary_risk_for_bank_transfer(

@@ -104,7 +104,9 @@ def update_scamdatabase_number(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run the Guardian scam-signal MCP server.")
+    parser = argparse.ArgumentParser(
+        description="Run the Guardian scam-signal MCP server."
+    )
     parser.add_argument(
         "--host",
         default="127.0.0.1",
