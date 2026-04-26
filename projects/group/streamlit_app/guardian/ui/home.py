@@ -6,6 +6,7 @@ from datetime import datetime
 
 import streamlit as st
 
+from guardian.state import start_scenario
 from guardian.scenarios.engine import ScenarioEngine
 from guardian.ui import activity, live_trace
 from guardian.ui.widgets import fmt_hkd, risk_chip
@@ -124,5 +125,5 @@ def _render_scenario_panel(engine: ScenarioEngine) -> None:
                 use_container_width=True,
                 help=scenario.label,
             ):
-                engine.play(scenario.id)
+                start_scenario(scenario.id)
                 st.rerun()

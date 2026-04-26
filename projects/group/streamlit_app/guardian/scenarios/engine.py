@@ -6,6 +6,11 @@
 elapsed are ingested into the Context agent; transactions are *not*
 auto-ingested — they're surfaced as ``pending_user_transaction`` so the
 demo operator drives the Bank → Transfer flow manually.
+
+If ``GUARDIAN_SCENARIO_SERIAL_DELAY_S`` is set, playback switches into a
+strict serial mode: scenario offsets are ignored, exactly one event is
+released at a time, and the next event waits ``x`` seconds after the
+previous assessment or pending transaction completes.
 """
 
 from __future__ import annotations
@@ -153,10 +158,6 @@ class ScenarioEngine:
             return
 
         now_monotonic = time.monotonic()
-        total_seconds = max(
-            (e.offset.total_seconds() for e in scenario.events),
-            default=0.0,
-        )
         scheduled = next((event for event in scenario.events if event.index not in self._fired), None)
         if scheduled is not None:
             due_at = _due_monotonic_for(
@@ -190,10 +191,11 @@ class ScenarioEngine:
                     )
                     self._context.ingest(event)
                 self._last_event_finished_monotonic = time.monotonic()
-                progress = (
-                    (scheduled.offset.total_seconds() + 1) / (total_seconds + 1)
-                    if total_seconds
-                    else 1.0
+                progress = _progress_after_fire(
+                    fired_count=len(self._fired),
+                    total_events=len(scenario.events),
+                    scheduled=scheduled,
+                    scenario=scenario,
                 )
                 self._state = ScenarioState(
                     playing=self._state.playing,
@@ -245,6 +247,10 @@ class ScenarioEngine:
             self._started_monotonic = None
             self._started_wall = None
             self._last_event_finished_monotonic = None
+            self._completed_at = None
+            self._fired = set()
+            return
+        self._last_event_finished_monotonic = time.monotonic()
 
     def stop(self) -> None:
         self._state = ScenarioState(completed=self._state.completed)
@@ -261,16 +267,35 @@ def _due_monotonic_for(
     started_monotonic: float,
     last_event_finished_monotonic: float | None,
 ) -> float:
-    actual_due = started_monotonic + scheduled.offset.total_seconds()
     max_idle_s = _scenario_max_idle_s()
-    if max_idle_s is None or last_event_finished_monotonic is None:
-        return actual_due
-    accelerated_due = last_event_finished_monotonic + max_idle_s
-    return min(actual_due, accelerated_due)
+    if max_idle_s is None:
+        return started_monotonic + scheduled.offset.total_seconds()
+    if last_event_finished_monotonic is None:
+        return started_monotonic
+    return last_event_finished_monotonic + max_idle_s
+
+
+def _progress_after_fire(
+    *,
+    fired_count: int,
+    total_events: int,
+    scheduled: ScheduledEvent,
+    scenario: Scenario,
+) -> float:
+    if total_events <= 0:
+        return 1.0
+    if _scenario_max_idle_s() is not None:
+        return fired_count / total_events
+    total_seconds = max((e.offset.total_seconds() for e in scenario.events), default=0.0)
+    if total_seconds <= 0:
+        return 1.0
+    return (scheduled.offset.total_seconds() + 1) / (total_seconds + 1)
 
 
 def _scenario_max_idle_s() -> float | None:
-    raw = os.environ.get("GUARDIAN_SCENARIO_MAX_IDLE_S", "").strip()
+    raw = os.environ.get("GUARDIAN_SCENARIO_SERIAL_DELAY_S", "").strip()
+    if not raw:
+        raw = os.environ.get("GUARDIAN_SCENARIO_MAX_IDLE_S", "").strip()
     if not raw:
         return None
     try:

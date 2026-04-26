@@ -119,7 +119,7 @@ def test_transaction_event_becomes_pending_instead_of_ingested(engine):
 
 
 def test_max_idle_env_caps_scenario_gaps(engine, monkeypatch):
-    monkeypatch.setenv("GUARDIAN_SCENARIO_MAX_IDLE_S", "1.5")
+    monkeypatch.setenv("GUARDIAN_SCENARIO_SERIAL_DELAY_S", "1.5")
     payload = {
         "id": "accelerated_demo",
         "label": "accelerated",
@@ -137,15 +137,21 @@ def test_max_idle_env_caps_scenario_gaps(engine, monkeypatch):
 
     time.sleep(0.1)
     engine.poll()
-    assert engine.state.progress > 0.0
+    assert engine._fired == {0}
+    assert engine.state.progress == 0.5
 
-    time.sleep(1.6)
+    time.sleep(1.1)
     engine.poll()
+    assert engine._fired == {0}
+
+    time.sleep(0.5)
+    engine.poll()
+    assert engine._fired == {0, 1}
     assert engine.state.progress == 1.0
 
 
 def test_max_idle_releases_events_one_by_one_after_previous_finishes(engine, monkeypatch):
-    monkeypatch.setenv("GUARDIAN_SCENARIO_MAX_IDLE_S", "1.0")
+    monkeypatch.setenv("GUARDIAN_SCENARIO_SERIAL_DELAY_S", "1.0")
     payload = {
         "id": "serial_accelerated_demo",
         "label": "serial accelerated",
@@ -162,9 +168,9 @@ def test_max_idle_releases_events_one_by_one_after_previous_finishes(engine, mon
     engine._loaded_index = True
     engine.play(scenario.id)
 
-    # Even if enough wall-clock time has passed to cover multiple capped gaps,
-    # the engine should only release one event per poll cycle.
-    time.sleep(2.2)
+    # Serial mode ignores original offsets and only releases one event after
+    # the configured delay since the prior event finished.
+    time.sleep(0.1)
     engine.poll()
     assert engine._fired == {0}
 
@@ -175,3 +181,47 @@ def test_max_idle_releases_events_one_by_one_after_previous_finishes(engine, mon
     time.sleep(1.1)
     engine.poll()
     assert engine._fired == {0, 1, 2}
+
+
+def test_max_idle_waits_after_resolving_pending_transaction(engine, monkeypatch):
+    monkeypatch.setenv("GUARDIAN_SCENARIO_SERIAL_DELAY_S", "1.0")
+    payload = {
+        "id": "txn_serial_demo",
+        "label": "txn serial",
+        "category": "test",
+        "expected": {"intervention": "none"},
+        "events": [
+            {
+                "t_seconds": 0,
+                "type": "transaction_attempt",
+                "amount_hkd": 5000,
+                "to_name": "Alice",
+                "to_account": "012-345678-001",
+                "new_recipient": False,
+            },
+            {
+                "t_seconds": 1,
+                "type": "sms",
+                "from": "Family",
+                "body": "Follow-up message",
+            },
+        ],
+    }
+    scenario = Scenario.from_json(payload)
+    engine._cache[scenario.id] = scenario
+    engine._loaded_index = True
+    engine.play(scenario.id)
+
+    time.sleep(0.05)
+    engine.poll()
+    assert engine.state.pending_user_transaction is not None
+    assert engine._fired == {0}
+
+    engine.resolve_pending_transaction()
+    time.sleep(0.6)
+    engine.poll()
+    assert engine._fired == {0}
+
+    time.sleep(0.5)
+    engine.poll()
+    assert engine._fired == {0, 1}

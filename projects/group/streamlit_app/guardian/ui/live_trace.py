@@ -85,6 +85,10 @@ class LiveTraceStore:
         completed.sort(key=lambda trace: float(trace.get("updated_at_ts", 0.0)), reverse=True)
         return completed[:limit]
 
+    def clear(self) -> None:
+        with self._lock:
+            self._traces.clear()
+
 
 def render(store: LiveTraceStore) -> None:
     running = store.running()

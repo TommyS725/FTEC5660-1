@@ -52,6 +52,30 @@ def bootstrap() -> None:
     _run_ambient_loop()
 
 
+def start_scenario(scenario_id: str) -> None:
+    """Reset session-scoped demo state, then start the selected scenario."""
+    event_log: EventLog = st.session_state["event_log"]
+    risk: RiskAgent = st.session_state["risk"]
+    intervention: InterventionAgent = st.session_state["intervention"]
+    bank: BankAccount = st.session_state["bank"]
+    engine: ScenarioEngine = st.session_state["engine"]
+    live_trace_store: LiveTraceStore = st.session_state["live_trace_store"]
+
+    event_log.clear()
+    risk.reset()
+    intervention.reset()
+    bank.reset()
+    live_trace_store.clear()
+
+    st.session_state["bank_transfer_assessment_future"] = None
+    st.session_state["bank_transfer_assessment_event"] = None
+    st.session_state["bank_transfer_cancelled_event_id"] = None
+    st.session_state["bank_transfer_success"] = None
+
+    engine.stop()
+    engine.play(scenario_id)
+
+
 def _initialize() -> None:
     scam_db = _load_scam_db()
     scam_signals = _build_scam_signal_provider(scam_db)
@@ -158,7 +182,7 @@ def _run_ambient_loop() -> None:
     # Honour optional GUARDIAN_AUTOPLAY env var so `just play <id>` works.
     autoplay = os.environ.get("GUARDIAN_AUTOPLAY", "").strip()
     if autoplay and not st.session_state.get(_AUTOPLAY_KEY):
-        engine.play(autoplay)
+        start_scenario(autoplay)
         st.session_state[_AUTOPLAY_KEY] = True
 
     # Drive periodic reruns while scenario / assessment work is active.
@@ -179,7 +203,11 @@ def _run_ambient_loop() -> None:
         except Exception as e:  # pragma: no cover - dep missing
             log.warning("streamlit-autorefresh unavailable: %s", e)
 
-    engine.poll()
+    if not _serial_scenario_waiting_for_completion(
+        bank_assessment_running=bank_assessment_running,
+        live_trace_store=live_trace_store,
+    ):
+        engine.poll()
 
     _render_sidebar_footer()
 
@@ -192,6 +220,19 @@ def _run_ambient_loop() -> None:
 def _bank_transfer_assessment_running() -> bool:
     future = st.session_state.get("bank_transfer_assessment_future")
     return isinstance(future, Future) and not future.done()
+
+
+def _serial_scenario_waiting_for_completion(
+    *,
+    bank_assessment_running: bool,
+    live_trace_store: LiveTraceStore,
+) -> bool:
+    raw = os.environ.get("GUARDIAN_SCENARIO_SERIAL_DELAY_S", "").strip()
+    if not raw:
+        raw = os.environ.get("GUARDIAN_SCENARIO_MAX_IDLE_S", "").strip()
+    if not raw:
+        return False
+    return bank_assessment_running or live_trace_store.has_running()
 
 
 def _render_sidebar_footer() -> None:
